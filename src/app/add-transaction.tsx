@@ -1,0 +1,492 @@
+import SelectField from "@/components/ui/SelectField";
+import { useTheme } from "@/context/ThemeContext";
+import { TransactionContext } from "@/context/TransactionContext";
+import type {
+  TransactionCategory,
+  TransactionType
+} from "@/types/transaction";
+import {
+  expenseCategories,
+  incomeCategories,
+} from "@/types/transaction";
+import { createTransaction } from "@/utils/transactionFactory";
+import {
+  validateTransactionForm,
+  type TransactionFormErrors,
+} from "@/utils/transactionValidation";
+import DateTimePicker from "@react-native-community/datetimepicker";
+import { useRouter } from "expo-router";
+import {
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
+import {
+  Keyboard,
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  ScrollView,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
+
+
+const BASE_BOTTOM_PADDING = 24;
+
+export default function AddTransactionScreen() {
+  const router = useRouter();
+  const { isDark } = useTheme();
+  const context = useContext(TransactionContext);
+
+  const scrollViewRef = useRef<ScrollView>(null);
+  const scrollOffsetRef = useRef(0);
+  const keyboardHeightRef = useRef(0);
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
+
+  if (!context) {
+    throw new Error(
+      "AddTransactionScreen must be used inside TransactionProvider"
+    );
+  }
+
+  const { addTransaction } = context;
+
+  const [transactionType, setTransactionType] =
+    useState<TransactionType>("expense");
+
+  const [amount, setAmount] = useState("");
+  const [category, setCategory] =
+    useState<TransactionCategory>("Food");
+
+  const availableCategories =
+    transactionType === "income"
+      ? incomeCategories
+      : expenseCategories;
+
+  const [description, setDescription] = useState("");
+  const [transactionDate, setTransactionDate] =
+    useState(new Date());
+  const [showDatePicker, setShowDatePicker] =
+    useState(false);
+
+  const [errors, setErrors] =
+    useState<TransactionFormErrors>({});
+
+  useEffect(() => {
+    const categories =
+      transactionType === "income"
+        ? incomeCategories
+        : expenseCategories;
+
+    const firstCategory = categories[0];
+
+    if (
+      !categories.includes(category) &&
+      firstCategory
+    ) {
+      setCategory(firstCategory);
+    }
+  }, [transactionType, category]);
+
+  useEffect(() => {
+    const showEvent =
+      Platform.OS === "ios"
+        ? "keyboardWillShow"
+        : "keyboardDidShow";
+
+    const hideEvent =
+      Platform.OS === "ios"
+        ? "keyboardWillHide"
+        : "keyboardDidHide";
+
+    const showSub = Keyboard.addListener(
+      showEvent,
+      (e) => {
+        const height = e.endCoordinates.height;
+
+        keyboardHeightRef.current = height;
+        setKeyboardHeight(height);
+
+        requestAnimationFrame(() => {
+          scrollViewRef.current?.scrollTo({
+            y: scrollOffsetRef.current + height,
+            animated: true,
+          });
+        });
+      }
+    );
+
+    const hideSub = Keyboard.addListener(
+        hideEvent,
+        () => {
+        const height = keyboardHeightRef.current;
+
+        keyboardHeightRef.current = 0;
+
+        scrollViewRef.current?.scrollTo({
+          y: Math.max(
+            0,
+            scrollOffsetRef.current - height
+          ),
+          animated: true,
+        });
+
+        setKeyboardHeight(0);
+      }
+    );
+
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
+
+  const handleSubmit = () => {
+    const validationErrors =
+      validateTransactionForm({
+        amount,
+        type: transactionType,
+        category,
+        date: transactionDate,
+      });
+
+    setErrors(validationErrors);
+
+    if (
+      Object.keys(validationErrors).length > 0
+    ) {
+      return;
+    }
+
+    const numericAmount = Number(amount);
+
+    const newTransaction = createTransaction({
+      type: transactionType,
+      amount: numericAmount,
+      category,
+      description,
+      date: transactionDate,
+    });
+
+    addTransaction(newTransaction);
+    router.back();
+  };
+
+  const clearAmountError = () => {
+    if (errors.amount) {
+      setErrors((currentErrors) => ({
+        ...currentErrors,
+        amount: undefined,
+      }));
+    }
+  };
+
+  const clearDateError = () => {
+    if (errors.date) {
+      setErrors((currentErrors) => ({
+        ...currentErrors,
+        date: undefined,
+      }));
+    }
+  };
+
+  return (
+    <KeyboardAvoidingView
+      className="flex-1 bg-gray-50 dark:bg-gray-950"
+      behavior={
+        Platform.OS === "ios" ? "padding" : undefined
+      }
+    >
+      <ScrollView
+        ref={scrollViewRef}
+        className="flex-1"
+        contentContainerStyle={{
+          paddingBottom:
+            keyboardHeight > 0
+              ? keyboardHeight + BASE_BOTTOM_PADDING
+              : BASE_BOTTOM_PADDING,
+          paddingHorizontal: 24,
+          paddingTop: 24,
+        }}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+        onScroll={(e) => {
+          scrollOffsetRef.current =
+            e.nativeEvent.contentOffset.y;
+        }}
+        scrollEventThrottle={16}
+      >
+        {/* =====================================================
+            PAGE HEADER
+        ===================================================== */}
+        <View>
+          <Text className="text-3xl font-bold text-gray-950 dark:text-white">
+            Add Transaction
+          </Text>
+
+          <Text className="mt-2 text-base leading-6 text-gray-500 dark:text-gray-400">
+            Record your income or expense.
+          </Text>
+        </View>
+
+        {/* =====================================================
+            TRANSACTION TYPE
+        ===================================================== */}
+        <View className="mt-8">
+          <Text className="text-sm font-semibold text-gray-600 dark:text-gray-300">
+            Transaction Type
+          </Text>
+
+          <View className="mt-3 flex-row gap-3">
+            <Pressable
+              className={`flex-1 rounded-xl border px-4 py-4 ${
+                transactionType === "income"
+                  ? "border-green-600 bg-green-600"
+                  : "border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900"
+              }`}
+              onPress={() =>
+                setTransactionType("income")
+              }
+            >
+              <View className="flex-row items-center justify-center">
+                <View
+                  className={`mr-2 h-7 w-7 items-center justify-center rounded-xl ${
+                    transactionType === "income"
+                      ? "bg-white/15"
+                      : "bg-green-50 dark:bg-green-950"
+                  }`}
+                >
+                  <Text
+                    className={`text-sm font-bold ${
+                      transactionType === "income"
+                        ? "text-white"
+                        : "text-green-600 dark:text-green-400"
+                    }`}
+                  >
+                    ↑
+                  </Text>
+                </View>
+
+                <Text
+                  className={`font-bold ${
+                    transactionType === "income"
+                      ? "text-white"
+                      : "text-gray-800 dark:text-gray-100"
+                  }`}
+                >
+                  Income
+                </Text>
+              </View>
+            </Pressable>
+
+            <Pressable
+              className={`flex-1 rounded-xl border px-4 py-4 ${
+                transactionType === "expense"
+                  ? "border-red-600 bg-red-600"
+                  : "border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900"
+              }`}
+              onPress={() =>
+                setTransactionType("expense")
+              }
+            >
+              <View className="flex-row items-center justify-center">
+                <View
+                  className={`mr-2 h-7 w-7 items-center justify-center rounded-xl ${
+                    transactionType === "expense"
+                      ? "bg-white/15"
+                      : "bg-red-50 dark:bg-red-950"
+                  }`}
+                >
+                  <Text
+                    className={`text-sm font-bold ${
+                      transactionType === "expense"
+                        ? "text-white"
+                        : "text-red-600 dark:text-red-400"
+                    }`}
+                  >
+                    ↓
+                  </Text>
+                </View>
+
+                <Text
+                  className={`font-bold ${
+                    transactionType === "expense"
+                      ? "text-white"
+                      : "text-gray-800 dark:text-gray-100"
+                  }`}
+                >
+                  Expense
+                </Text>
+              </View>
+            </Pressable>
+          </View>
+        </View>
+
+        {/* =====================================================
+            AMOUNT
+        ===================================================== */}
+        <View className="mt-8">
+          <Text className="text-sm font-semibold text-gray-600 dark:text-gray-300">
+            Amount
+          </Text>
+
+          <TextInput
+            className={`mt-3 rounded-xl border bg-white px-4 py-4 text-lg font-semibold text-gray-950 dark:bg-gray-900 dark:text-white ${
+              errors.amount
+                ? "border-red-500"
+                : "border-gray-200 dark:border-gray-800"
+            }`}
+            placeholder="0.00"
+            placeholderTextColor={
+              isDark ? "#64748B" : "#9CA3AF"
+            }
+            value={amount}
+            onChangeText={(value) => {
+              setAmount(value);
+              clearAmountError();
+            }}
+            keyboardType="decimal-pad"
+          />
+
+          {errors.amount && (
+            <Text className="mt-2 text-sm text-red-500">
+              {errors.amount}
+            </Text>
+          )}
+        </View>
+
+        {/* =====================================================
+            DATE
+        ===================================================== */}
+        <View className="mt-8">
+          <Text className="text-sm font-semibold text-gray-600 dark:text-gray-300">
+            Date
+          </Text>
+
+          <Pressable
+            className={`mt-3 flex-row items-center rounded-xl border bg-white px-4 py-4 dark:bg-gray-900 ${
+              errors.date
+                ? "border-red-500"
+                : "border-gray-200 dark:border-gray-800"
+            }`}
+            onPress={() =>
+              setShowDatePicker(true)
+            }
+          >
+            <View className="h-9 w-9 items-center justify-center rounded-xl bg-blue-50 dark:bg-blue-950">
+              <Text className="text-base">📅</Text>
+            </View>
+
+            <View className="ml-3 flex-1">
+              <Text className="text-base font-semibold text-gray-950 dark:text-white">
+                {transactionDate.toLocaleDateString(
+                  "en-NG",
+                  {
+                    day: "numeric",
+                    month: "long",
+                    year: "numeric",
+                  }
+                )}
+              </Text>
+
+              <Text className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                Select the transaction date
+              </Text>
+            </View>
+          </Pressable>
+
+          {errors.date && (
+            <Text className="mt-2 text-sm text-red-500">
+              {errors.date}
+            </Text>
+          )}
+
+          {showDatePicker && (
+            <DateTimePicker
+              value={transactionDate}
+              mode="date"
+              display="default"
+              maximumDate={new Date()}
+              onValueChange={(
+                event,
+                selectedDate
+              ) => {
+                setShowDatePicker(false);
+
+                if (selectedDate) {
+                  setTransactionDate(selectedDate);
+                  clearDateError();
+                }
+              }}
+            />
+          )}
+        </View>
+
+        {/* =====================================================
+            CATEGORY
+        ===================================================== */}
+        <View className="mt-8">
+          <SelectField
+            label="Category"
+            value={category}
+            options={availableCategories.map(
+              (item) => ({
+                label: item,
+                value: item,
+              })
+            )}
+            onChange={(value) => {
+              setCategory(
+                value as TransactionCategory
+              );
+
+              if (errors.category) {
+                setErrors((currentErrors) => ({
+                  ...currentErrors,
+                  category: undefined,
+                }));
+              }
+            }}
+            error={errors.category}
+          />
+        </View>
+
+        {/* =====================================================
+            DESCRIPTION
+        ===================================================== */}
+        <View className="mt-8">
+          <Text className="text-sm font-semibold text-gray-600 dark:text-gray-300">
+            Description
+          </Text>
+
+          <TextInput
+            className="mt-3 min-h-[110px] rounded-xl border border-gray-200 bg-white px-4 py-4 text-base leading-6 text-gray-950 dark:border-gray-800 dark:bg-gray-900 dark:text-white"
+            placeholder="What was this transaction for?"
+            placeholderTextColor={
+              isDark ? "#64748B" : "#9CA3AF"
+            }
+            value={description}
+            onChangeText={setDescription}
+            multiline
+            textAlignVertical="top"
+          />
+        </View>
+
+        {/* =====================================================
+            SUBMIT
+        ===================================================== */}
+        <Pressable
+          className="mt-6 flex-row items-center justify-center rounded-xl bg-blue-800 py-4 dark:bg-blue-900 px-6 py-4"
+          onPress={handleSubmit}
+        >
+          <Text className="text-center text-base font-bold text-white">
+            Save Transaction
+          </Text>
+        </Pressable>
+      </ScrollView>
+    </KeyboardAvoidingView>
+  );
+}

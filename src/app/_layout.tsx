@@ -1,18 +1,59 @@
-import { DarkTheme, DefaultTheme, ThemeProvider } from 'expo-router';
-import * as SplashScreen from 'expo-splash-screen';
-import { useColorScheme } from 'react-native';
+import { ThemeProvider as AppThemeProvider, useTheme } from "@/context/ThemeContext";
+import { TransactionProvider } from "@/context/TransactionContext";
+import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from "expo-router";
+import "../global.css";
 
-import { AnimatedSplashOverlay } from '@/components/animated-icon';
-import AppTabs from '@/components/app-tabs';
+function AppNavigator() {
+  const { isDark, colors } = useTheme();
 
-SplashScreen.preventAutoHideAsync();
 
-export default function TabLayout() {
-  const colorScheme = useColorScheme();
+  
   return (
-    <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <AnimatedSplashOverlay />
-      <AppTabs />
+    <ThemeProvider
+      value={isDark ? DarkTheme : DefaultTheme}
+    >
+      <TransactionProvider>
+        <Stack>
+          <Stack.Screen
+            name="(tabs)"
+            options={{
+              headerShown: false,
+            }}
+          />
+
+          <Stack.Screen
+            name="add-transaction"
+            options={{
+              title: "Add Transaction",
+              headerStyle: {
+                backgroundColor: colors.background,
+              },
+              headerTintColor: colors.textPrimary,
+              headerShadowVisible: false,
+            }}
+          />
+
+          <Stack.Screen
+            name="edit-transaction"
+            options={{
+              title: "Edit Transaction",
+              headerStyle: {
+                backgroundColor: colors.background,
+              },
+              headerTintColor: colors.textPrimary,
+              headerShadowVisible: false,
+            }}
+          />
+        </Stack>
+      </TransactionProvider>
     </ThemeProvider>
+  );
+}
+
+export default function RootLayout() {
+  return (
+    <AppThemeProvider>
+      <AppNavigator />
+    </AppThemeProvider>
   );
 }

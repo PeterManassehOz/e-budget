@@ -76,7 +76,7 @@ export default function HomeScreen() {
         <View className="flex-row items-start justify-between">
           <View className="flex-1 pr-4">
             <Text className="text-3xl font-bold text-gray-950 dark:text-white">
-              PocketBudget
+              E-Budget
             </Text>
 
             <Text className="mt-2 text-base leading-6 text-gray-500 dark:text-gray-400">

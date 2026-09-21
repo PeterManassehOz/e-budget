@@ -1,4 +1,5 @@
 import SelectField from "@/components/ui/SelectField";
+import { getCategoryColor, getCategoryIcon } from "@/constants/categoryVisuals";
 import { useTheme } from "@/context/ThemeContext";
 import { TransactionContext } from "@/context/TransactionContext";
 import { formatCurrency } from "@/utils/currency";
@@ -15,68 +16,57 @@ import {
   calculateTotalExpenses,
   calculateTotalIncome,
 } from "@/utils/transactionAnalytics";
+import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
-import { useContext, useState } from "react";
-import {
-  ScrollView,
-  Text,
-  View,
-  useWindowDimensions,
-} from "react-native";
-import { LineChart, PieChart } from "react-native-chart-kit";
+import { useCallback, useContext, useState } from "react";
+import { Pressable, RefreshControl, ScrollView, Text, View, useWindowDimensions } from "react-native";
+import { LineChart } from "react-native-chart-kit";
+import { PieChart as DonutChart } from "react-native-gifted-charts";
 
-const CATEGORY_COLORS: Record<string, string> = {
-  Food: "#2563EB",
-  Transport: "#16A34A",
-  Bills: "#DC2626",
-  Shopping: "#CA8A04",
-  Entertainment: "#9333EA",
-  Health: "#0891B2",
-  Other: "#EA580C",
-  Salary: "#16A34A",
-  Freelance: "#7C3AED",
-};
+function cardShadow(isDark: boolean, borderColor: string) {
+  return {
+    shadowColor: "#000000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: isDark ? 0 : 0.06,
+    shadowRadius: 10,
+    elevation: isDark ? 0 : 2,
+    borderWidth: isDark ? 1 : 0,
+    borderColor,
+  };
+}
 
 export default function AnalyticsScreen() {
-  const { isDark } = useTheme();
-
+  const { isDark, colors } = useTheme();
   const { width: screenWidth } = useWindowDimensions();
-
   const chartWidth = screenWidth - 48;
 
   const context = useContext(TransactionContext);
 
   if (!context) {
-    throw new Error(
-      "AnalyticsScreen must be used inside TransactionProvider"
-    );
+    throw new Error("AnalyticsScreen must be used inside TransactionProvider");
   }
 
   const { transactions } = context;
 
-  const [dateRange, setDateRange] =
-    useState<AnalyticsDateRange>("thisMonth");
+  const [dateRange, setDateRange] = useState<AnalyticsDateRange>("thisMonth");
+  const [selectedCategoryIndex, setSelectedCategoryIndex] = useState(0);
 
-  const dateRangeOptions: {
-    label: string;
-    value: AnalyticsDateRange;
-  }[] = [
-    {
-      label: "7 Days",
-      value: "7days",
-    },
-    {
-      label: "30 Days",
-      value: "30days",
-    },
-    {
-      label: "This Month",
-      value: "thisMonth",
-    },
-    {
-      label: "All Time",
-      value: "allTime",
-    },
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  const handleRefresh = useCallback(() => {
+    setIsRefreshing(true);
+
+    // No backend to re-sync — transactions come from local AsyncStorage
+    // via TransactionContext — so this is a deliberate brief pause rather
+    // than a real fetch, matching the pattern used on the Home screen.
+    setTimeout(() => setIsRefreshing(false), 600);
+  }, []);
+
+  const dateRangeOptions: { label: string; value: AnalyticsDateRange }[] = [
+    { label: "7 Days", value: "7days" },
+    { label: "30 Days", value: "30days" },
+    { label: "This Month", value: "thisMonth" },
+    { label: "All Time", value: "allTime" },
   ];
 
   const filteredTransactions = filterTransactionsByDateRange(
@@ -85,28 +75,15 @@ export default function AnalyticsScreen() {
   );
 
   const trendStartDate = getDateRangeStart(dateRange);
-
-  const dailyTrend = calculateDailyTrend(
-    filteredTransactions,
-    trendStartDate
-  );
-
-  const monthlyTrend = calculateMonthlyTrend(
-    filteredTransactions
-  );
-
-  const trendData =
-    dateRange === "allTime"
-      ? monthlyTrend
-      : dailyTrend;
+  const dailyTrend = calculateDailyTrend(filteredTransactions, trendStartDate);
+  const monthlyTrend = calculateMonthlyTrend(filteredTransactions);
+  const trendData = dateRange === "allTime" ? monthlyTrend : dailyTrend;
 
   const trendChartData = {
     labels: trendData.map((item, index) => {
       if (dateRange === "allTime") {
         const [year, month] = item.date.split("-");
-
-        return index % 2 === 0 ||
-          index === trendData.length - 1
+        return index % 2 === 0 || index === trendData.length - 1
           ? `${month}/${year.slice(2)}`
           : "";
       }
@@ -114,111 +91,77 @@ export default function AnalyticsScreen() {
       const date = new Date(`${item.date}T00:00:00`);
 
       if (dateRange === "7days") {
-        return index % 2 === 0 ||
-          index === trendData.length - 1
+        return index % 2 === 0 || index === trendData.length - 1
           ? date.getDate().toString()
           : "";
       }
 
-      return index % 7 === 0 ||
-        index === trendData.length - 2
-        ? date.toLocaleDateString("en-NG", {
-            month: "short",
-            day: "numeric",
-          })
+      return index % 7 === 0 || index === trendData.length - 2
+        ? date.toLocaleDateString("en-NG", { month: "short", day: "numeric" })
         : "";
     }),
     datasets: [
-      {
-        data: trendData.map((item) => item.income),
-        color: () => "#16A34A",
-      },
-      {
-        data: trendData.map((item) => item.expenses),
-        color: () => "#DC2626",
-      },
+      { data: trendData.map((item) => item.income), color: () => "#16A34A" },
+      { data: trendData.map((item) => item.expenses), color: () => "#DC2626" },
     ],
   };
 
-  const totalIncome =
-    calculateTotalIncome(filteredTransactions);
-
-  const totalExpenses =
-    calculateTotalExpenses(filteredTransactions);
-
+  const totalIncome = calculateTotalIncome(filteredTransactions);
+  const totalExpenses = calculateTotalExpenses(filteredTransactions);
   const balance = totalIncome - totalExpenses;
+  const totalTransactions = filteredTransactions.length;
 
-  const totalTransactions =
-    filteredTransactions.length;
+  const expenseTransactionCount = filteredTransactions.filter(
+    (transaction) => transaction.type === "expense"
+  ).length;
 
-  const incomeTransactions =
-    filteredTransactions.filter(
-      (transaction) => transaction.type === "income"
-    );
-
-  const expenseTransactions =
-    filteredTransactions.filter(
-      (transaction) => transaction.type === "expense"
-    );
-
-  const averageIncome =
-    calculateAverageTransaction(
-      filteredTransactions,
-      "income"
-    );
-
-  const averageExpense =
-    calculateAverageTransaction(
-      filteredTransactions,
-      "expense"
-    );
+  const averageIncome = calculateAverageTransaction(
+    filteredTransactions,
+    "income"
+  );
+  const averageExpense = calculateAverageTransaction(
+    filteredTransactions,
+    "expense"
+  );
 
   const expensePercentage =
-    totalIncome > 0
-      ? (totalExpenses / totalIncome) * 100
-      : 0;
+    totalIncome > 0 ? (totalExpenses / totalIncome) * 100 : 0;
 
-  const categoryTotals =
-    calculateCategoryTotals(filteredTransactions);
+  const categoryTotals = calculateCategoryTotals(filteredTransactions);
 
-  const categoryBreakdown = Object.entries(
-    categoryTotals
-  )
+  const categoryBreakdown = Object.entries(categoryTotals)
     .map(([category, amount]) => ({
       category,
       amount,
-      percentage:
-        totalExpenses > 0
-          ? (amount / totalExpenses) * 100
-          : 0,
+      percentage: totalExpenses > 0 ? (amount / totalExpenses) * 100 : 0,
     }))
     .sort((a, b) => b.amount - a.amount);
 
-  const chartData = categoryBreakdown.map(
-    (item) => ({
-      name: item.category,
-      amount: item.amount,
-      color:
-        CATEGORY_COLORS[item.category] ??
-        "#4B5563",
-    })
-  );
+  // `focused` on the selected index makes that slice pop out slightly,
+  // matching how the reference highlights one category at a time.
+  const donutData = categoryBreakdown.map((item, index) => ({
+    value: item.amount,
+    color: getCategoryColor(item.category),
+    focused: index === selectedCategoryIndex,
+  }));
 
-  const chartBackground = isDark
-    ? "#111827"
-    : "#FFFFFF";
-
-  const chartLabelColor = isDark
-    ? "#CBD5E1"
-    : "#374151";
+  const chartBackground = isDark ? "#111827" : "#FFFFFF";
+  const chartLabelColor = isDark ? "#CBD5E1" : "#374151";
 
   return (
     <ScrollView
       className="flex-1 bg-gray-50 px-6 dark:bg-gray-950"
       contentContainerClassName="pt-12 pb-[110px]"
       showsVerticalScrollIndicator={false}
+      refreshControl={
+        <RefreshControl
+          refreshing={isRefreshing}
+          onRefresh={handleRefresh}
+          tintColor={isDark ? "#60A5FA" : "#2563EB"}
+          colors={[isDark ? "#60A5FA" : "#2563EB"]}
+        />
+      }
     >
-      {/* Header */}
       <View className="flex-row items-start justify-between">
         <View className="flex-1 pr-4">
           <Text className="text-3xl font-bold text-gray-950 dark:text-white">
@@ -231,28 +174,20 @@ export default function AnalyticsScreen() {
         </View>
 
         <View className="ml-2 h-11 w-11 items-center justify-center rounded-full bg-gray-100 dark:bg-gray-800">
-          <Text className="text-lg">
-            {isDark ? "📊" : "📈"}
-          </Text>
+          <Text className="text-lg">{isDark ? "📊" : "📈"}</Text>
         </View>
       </View>
 
-      {/* Date Range */}
       <View className="mt-6">
         <SelectField
           label="Date Range"
           value={dateRange}
           options={dateRangeOptions}
-          onChange={(value) =>
-            setDateRange(
-              value as AnalyticsDateRange
-            )
-          }
+          onChange={(value) => setDateRange(value as AnalyticsDateRange)}
         />
       </View>
 
-      {/* Balance */}
-      <View className="mt-8 overflow-hidden rounded-xl">
+      <View className="mt-8 overflow-hidden rounded-2xl">
         <LinearGradient
           colors={
             isDark
@@ -261,19 +196,14 @@ export default function AnalyticsScreen() {
           }
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
-          className="overflow-hidden rounded-xl"
+          className="overflow-hidden rounded-2xl"
         >
-          {/* Decorative background */}
           <View className="absolute -right-16 -top-20 h-56 w-56 rounded-full bg-white/10" />
-
           <View className="absolute -bottom-24 -left-20 h-64 w-64 rounded-full bg-indigo-300/10" />
-
           <View className="absolute right-12 top-20 h-24 w-24 rounded-full bg-blue-300/5" />
-
-          {/* Subtle shine */}
           <View className="absolute left-0 right-0 top-0 h-24 bg-white/5" />
 
-          {/* Content */}
+
           <View className="relative p-6">
             <View className="flex-row items-center justify-between">
               <View>
@@ -287,9 +217,11 @@ export default function AnalyticsScreen() {
               </View>
 
               <View className="h-10 w-10 items-center justify-center rounded-full border border-white/15 bg-white/10">
-                <Text className="text-lg text-white">
-                  {balance >= 0 ? "↗" : "↘"}
-                </Text>
+                <Ionicons
+                  name={balance >= 0 ? "trending-up" : "trending-down"}
+                  size={18}
+                  color="#FFFFFF"
+                />
               </View>
             </View>
 
@@ -301,9 +233,11 @@ export default function AnalyticsScreen() {
 
             <View className="mt-5 flex-row items-center">
               <View className="h-9 w-9 items-center justify-center rounded-xl border border-white/10 bg-white/10">
-                <Text className="text-sm font-bold text-white">
-                  {balance >= 0 ? "↑" : "↓"}
-                </Text>
+                <Ionicons
+                  name={balance >= 0 ? "arrow-up" : "arrow-down"}
+                  size={16}
+                  color="#FFFFFF"
+                />
               </View>
 
               <Text className="ml-3 flex-1 text-sm leading-5 text-blue-100/90">
@@ -316,18 +250,22 @@ export default function AnalyticsScreen() {
         </LinearGradient>
       </View>
 
-      {/* Income / Expenses */}
       <View className="mt-5 flex-row gap-3">
-        <View className="flex-1 rounded-xl border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-gray-900">
+        <View
+          className="flex-1 rounded-2xl bg-white p-5 dark:bg-gray-900"
+          style={cardShadow(isDark, colors.border)}
+        >
           <View className="flex-row items-center justify-between">
             <Text className="text-sm font-semibold text-gray-500 dark:text-gray-400">
               Income
             </Text>
 
             <View className="h-9 w-9 items-center justify-center rounded-xl bg-green-50 dark:bg-green-950">
-              <Text className="text-base font-bold text-green-600 dark:text-green-400">
-                ↑
-              </Text>
+              <Ionicons
+                name="arrow-up"
+                size={16}
+                color={isDark ? "#4ADE80" : "#16A34A"}
+              />
             </View>
           </View>
 
@@ -340,16 +278,21 @@ export default function AnalyticsScreen() {
           </Text>
         </View>
 
-        <View className="flex-1 rounded-xl border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-gray-900">
+        <View
+          className="flex-1 rounded-2xl bg-white p-5 dark:bg-gray-900"
+          style={cardShadow(isDark, colors.border)}
+        >
           <View className="flex-row items-center justify-between">
             <Text className="text-sm font-semibold text-gray-500 dark:text-gray-400">
               Expenses
             </Text>
 
             <View className="h-9 w-9 items-center justify-center rounded-xl bg-red-50 dark:bg-red-950">
-              <Text className="text-base font-bold text-red-600 dark:text-red-400">
-                ↓
-              </Text>
+              <Ionicons
+                name="arrow-down"
+                size={16}
+                color={isDark ? "#F87171" : "#DC2626"}
+              />
             </View>
           </View>
 
@@ -363,8 +306,10 @@ export default function AnalyticsScreen() {
         </View>
       </View>
 
-      {/* Spending Overview */}
-      <View className="mt-6 rounded-xl border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-gray-900">
+      <View
+        className="mt-6 rounded-2xl bg-white p-5 dark:bg-gray-900"
+        style={cardShadow(isDark, colors.border)}
+      >
         <View className="flex-row items-center justify-between">
           <View>
             <Text className="text-xl font-bold text-gray-950 dark:text-white">
@@ -386,17 +331,11 @@ export default function AnalyticsScreen() {
         <View className="mt-5 h-3 overflow-hidden rounded-full bg-gray-200 dark:bg-gray-700">
           <View
             className="h-full rounded-full bg-red-500"
-            style={{
-              width: `${Math.min(
-                expensePercentage,
-                100
-              )}%`,
-            }}
+            style={{ width: `${Math.min(expensePercentage, 100)}%` }}
           />
         </View>
       </View>
 
-      {/* Income vs Expenses */}
       <View className="mt-8">
         <Text className="text-xl font-bold text-gray-950 dark:text-white">
           Income vs Expenses
@@ -409,17 +348,34 @@ export default function AnalyticsScreen() {
         </Text>
 
         {filteredTransactions.length === 0 ? (
-          <View className="mt-4 rounded-xl border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-gray-900">
-            <Text className="text-center text-base text-gray-500 dark:text-gray-400">
+          <View
+            className="mt-4 items-center rounded-2xl bg-white px-6 py-10 dark:bg-gray-900"
+            style={cardShadow(isDark, colors.border)}
+          >
+            <View className="h-14 w-14 items-center justify-center rounded-xl bg-blue-50 dark:bg-blue-950">
+              <Ionicons
+                name="trending-up-outline"
+                size={24}
+                color={isDark ? "#60A5FA" : "#2563EB"}
+              />
+            </View>
+
+            <Text className="mt-5 text-lg font-bold text-gray-950 dark:text-white">
+              No activity yet
+            </Text>
+
+            <Text className="mt-2 text-center text-base leading-6 text-gray-500 dark:text-gray-400">
               Add transactions to see your income and expense trend.
             </Text>
           </View>
         ) : (
-          <View className="mt-4 overflow-hidden rounded-xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900">
+          <View
+            className="mt-4 overflow-hidden rounded-2xl bg-white dark:bg-gray-900"
+            style={cardShadow(isDark, colors.border)}
+          >
             <View className="flex-row items-center justify-between px-5 pt-5">
               <View className="flex-row items-center">
                 <View className="h-2.5 w-2.5 rounded-full bg-green-600" />
-
                 <Text className="ml-2 text-xs font-semibold text-gray-500 dark:text-gray-400">
                   Income
                 </Text>
@@ -427,7 +383,6 @@ export default function AnalyticsScreen() {
 
               <View className="flex-row items-center">
                 <View className="h-2.5 w-2.5 rounded-full bg-red-600" />
-
                 <Text className="ml-2 text-xs font-semibold text-gray-500 dark:text-gray-400">
                   Expenses
                 </Text>
@@ -444,19 +399,11 @@ export default function AnalyticsScreen() {
                   backgroundGradientFrom: chartBackground,
                   backgroundGradientTo: chartBackground,
                   decimalPlaces: 0,
-                  color: () =>
-                    isDark
-                      ? "#60A5FA"
-                      : "#2563EB",
-                  labelColor: () =>
-                    chartLabelColor,
-                  propsForDots: {
-                    r: "3",
-                  },
+                  color: () => (isDark ? "#60A5FA" : "#2563EB"),
+                  labelColor: () => chartLabelColor,
+                  propsForDots: { r: "3" },
                   propsForBackgroundLines: {
-                    stroke: isDark
-                      ? "#273449"
-                      : "#E5E7EB",
+                    stroke: isDark ? "#273449" : "#E5E7EB",
                   },
                 }}
                 bezier
@@ -469,14 +416,14 @@ export default function AnalyticsScreen() {
                 withInnerLines
                 withOuterLines={false}
                 withDots
-                withShadow={false}
+                withShadow
               />
             </View>
           </View>
         )}
       </View>
 
-      {/* Expenses by Category */}
+      {/* Expenses by Category — donut + legend, matching the reference */}
       <View className="mt-8">
         <Text className="text-xl font-bold text-gray-950 dark:text-white">
           Expenses by Category
@@ -486,102 +433,193 @@ export default function AnalyticsScreen() {
           See where your money is going.
         </Text>
 
-        {categoryBreakdown.length > 0 && (
-          <View className="mt-4 overflow-hidden rounded-xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900">
-            <View className="px-5 pt-5">
-              <Text className="text-sm font-semibold uppercase tracking-[1.2px] text-gray-400 dark:text-gray-500">
-                Distribution
-              </Text>
-            </View>
-
-            <View className="mt-2 items-center">
-              <PieChart
-                data={chartData}
-                width={chartWidth}
-                height={220}
-                chartConfig={{
-                  color: () =>
-                    isDark
-                      ? "#60A5FA"
-                      : "#2563EB",
-                  labelColor: () =>
-                    chartLabelColor,
-                  backgroundColor: chartBackground,
-                  backgroundGradientFrom: chartBackground,
-                  backgroundGradientTo: chartBackground,
-                  decimalPlaces: 0,
-                }}
-                accessor="amount"
-                backgroundColor="transparent"
-                paddingLeft="0"
-                center={[80, 0]}
-                absolute
-                hasLegend={false}
+        {categoryBreakdown.length === 0 ? (
+          <View
+            className="mt-4 items-center rounded-2xl bg-white px-6 py-10 dark:bg-gray-900"
+            style={cardShadow(isDark, colors.border)}
+          >
+            <View className="h-14 w-14 items-center justify-center rounded-xl bg-blue-50 dark:bg-blue-950">
+              <Ionicons
+                name="pie-chart-outline"
+                size={24}
+                color={isDark ? "#60A5FA" : "#2563EB"}
               />
             </View>
-          </View>
-        )}
 
-        {categoryBreakdown.length === 0 ? (
-          <View className="mt-4 rounded-xl border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-gray-900">
-            <Text className="text-center text-base text-gray-500 dark:text-gray-400">
+            <Text className="mt-5 text-lg font-bold text-gray-950 dark:text-white">
+              No categories yet
+            </Text>
+
+            <Text className="mt-2 text-center text-base leading-6 text-gray-500 dark:text-gray-400">
               Your expense categories will appear here.
             </Text>
           </View>
         ) : (
-          <View className="mt-4 rounded-xl border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-gray-900">
-            {categoryBreakdown.map((item) => (
-              <View
-                key={item.category}
-                className="mb-5 last:mb-0"
-              >
-                <View className="flex-row items-center justify-between">
-                  <View className="flex-1 flex-row items-center">
-                    <View
-                      className="mr-3 h-3 w-3 rounded-full"
+          <View
+            className="mt-4 overflow-hidden rounded-2xl bg-white dark:bg-gray-900"
+            style={cardShadow(isDark, colors.border)}
+          >
+            <View className="items-center px-5 pt-6">
+              <DonutChart
+                data={donutData}
+                donut
+                radius={90}
+                innerRadius={50}
+                innerCircleColor={chartBackground}
+                strokeWidth={2}
+                strokeColor={chartBackground}
+                sectionAutoFocus
+                extraRadius={6}
+                onPress={(_item: unknown, index: number) =>
+                  setSelectedCategoryIndex(index)
+                }
+                centerLabelComponent={() => (
+                  <View style={{ alignItems: "center" }}>
+                    <Text
                       style={{
-                        backgroundColor:
-                          CATEGORY_COLORS[
-                            item.category
-                          ] ?? "#4B5563",
+                        fontSize: 30,
+                        fontWeight: "700",
+                        color: isDark ? "#FFFFFF" : "#0F172A",
                       }}
-                    />
+                    >
+                      {expenseTransactionCount}
+                    </Text>
 
-                    <Text className="flex-1 text-base font-semibold text-gray-950 dark:text-white">
-                      {item.category}
+                    <Text
+                      style={{
+                        marginTop: 2,
+                        fontSize: 13,
+                        color: chartLabelColor,
+                      }}
+                    >
+                      Expenses
                     </Text>
                   </View>
+                )}
+              />
+            </View>
 
-                  <Text className="ml-3 text-base font-bold text-gray-950 dark:text-white">
-                    {formatCurrency(item.amount)}
-                  </Text>
-                </View>
+            {/* Legend — tapping a row also selects/focuses its slice */}
+            <View className="mt-6 px-5 pb-5">
+              {categoryBreakdown.map((item, index) => {
+                const categoryColor = getCategoryColor(item.category);
+                const isSelected = index === selectedCategoryIndex;
 
-                <View className="mt-2 flex-row items-center justify-between">
-                  <View className="h-2 flex-1 overflow-hidden rounded-full bg-gray-200 dark:bg-gray-700">
+                return (
+                  <Pressable
+                    key={item.category}
+                    className="mb-2 flex-row items-center rounded-xl px-3 py-3 last:mb-0"
+                    style={{
+                      backgroundColor: isSelected
+                        ? categoryColor
+                        : "transparent",
+                    }}
+                    onPress={() => setSelectedCategoryIndex(index)}
+                  >
                     <View
-                      className="h-full rounded-full"
+                      className="mr-3 h-3 w-3 rounded-sm"
                       style={{
-                        width: `${item.percentage}%`,
-                        backgroundColor:
-                          CATEGORY_COLORS[
-                            item.category
-                          ] ?? "#4B5563",
+                        backgroundColor: isSelected
+                          ? "#FFFFFF"
+                          : categoryColor,
                       }}
                     />
-                  </View>
 
-                  <Text className="ml-3 w-14 text-right text-sm text-gray-500 dark:text-gray-400">
-                    {item.percentage.toFixed(1)}%
-                  </Text>
-                </View>
-              </View>
-            ))}
+                    <Text
+                      className="flex-1 text-base font-semibold"
+                      style={{
+                        color: isSelected
+                          ? "#FFFFFF"
+                          : isDark
+                            ? "#F8FAFC"
+                            : "#0F172A",
+                      }}
+                    >
+                      {item.category}
+                    </Text>
+
+                    <Text
+                      className="text-sm font-semibold"
+                      style={{
+                        color: isSelected
+                          ? "#FFFFFF"
+                          : isDark
+                            ? "#94A3B8"
+                            : "#64748B",
+                      }}
+                    >
+                      {formatCurrency(item.amount)} · {item.percentage.toFixed(0)}%
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
           </View>
         )}
       </View>
 
-      {/* Transaction Statistics */}
+      {/* Detailed breakdown with icons + progress bars — kept as a deeper
+          view beneath the at-a-glance donut+legend above */}
+      {categoryBreakdown.length > 0 && (
+        <View className="mt-4">
+          <View
+            className="rounded-2xl bg-white p-5 dark:bg-gray-900"
+            style={cardShadow(isDark, colors.border)}
+          >
+            {categoryBreakdown.map((item) => {
+              const categoryColor = getCategoryColor(item.category);
+
+              return (
+                <View key={item.category} className="mb-5 last:mb-0">
+                  <View className="flex-row items-center justify-between">
+                    <View className="flex-1 flex-row items-center">
+                      <View
+                        className="mr-3 h-9 w-9 items-center justify-center rounded-xl"
+                        style={{
+                          backgroundColor: isDark
+                            ? `${categoryColor}26`
+                            : `${categoryColor}14`,
+                        }}
+                      >
+                        <Ionicons
+                          name={getCategoryIcon(item.category)}
+                          size={16}
+                          color={categoryColor}
+                        />
+                      </View>
+
+                      <Text className="flex-1 text-base font-semibold text-gray-950 dark:text-white">
+                        {item.category}
+                      </Text>
+                    </View>
+
+                    <Text className="ml-3 text-base font-bold text-gray-950 dark:text-white">
+                      {formatCurrency(item.amount)}
+                    </Text>
+                  </View>
+
+                  <View className="mt-2 flex-row items-center justify-between">
+                    <View className="h-2 flex-1 overflow-hidden rounded-full bg-gray-200 dark:bg-gray-700">
+                      <View
+                        className="h-full rounded-full"
+                        style={{
+                          width: `${item.percentage}%`,
+                          backgroundColor: categoryColor,
+                        }}
+                      />
+                    </View>
+
+                    <Text className="ml-3 w-14 text-right text-sm text-gray-500 dark:text-gray-400">
+                      {item.percentage.toFixed(1)}%
+                    </Text>
+                  </View>
+                </View>
+              );
+            })}
+          </View>
+        </View>
+      )}
+
       <View className="mt-8">
         <Text className="text-xl font-bold text-gray-950 dark:text-white">
           Transaction Statistics
@@ -591,13 +629,17 @@ export default function AnalyticsScreen() {
           A quick summary of your activity.
         </Text>
 
-        <View className="mt-4 rounded-xl border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-gray-900">
-          {/* Total Transactions */}
+        <View
+          className="mt-4 rounded-2xl bg-white p-5 dark:bg-gray-900"
+          style={cardShadow(isDark, colors.border)}
+        >
           <View className="flex-row items-center">
             <View className="h-11 w-11 items-center justify-center rounded-xl bg-blue-50 dark:bg-blue-950">
-              <Text className="text-base font-bold text-blue-600 dark:text-blue-400">
-                #
-              </Text>
+              <Ionicons
+                name="albums-outline"
+                size={18}
+                color={isDark ? "#60A5FA" : "#2563EB"}
+              />
             </View>
 
             <View className="ml-4 flex-1">
@@ -613,12 +655,13 @@ export default function AnalyticsScreen() {
 
           <View className="my-5 h-px bg-gray-100 dark:bg-gray-800" />
 
-          {/* Average Income */}
           <View className="flex-row items-center">
             <View className="h-11 w-11 items-center justify-center rounded-xl bg-green-50 dark:bg-green-950">
-              <Text className="text-base font-bold text-green-600 dark:text-green-400">
-                ↑
-              </Text>
+              <Ionicons
+                name="arrow-up"
+                size={18}
+                color={isDark ? "#4ADE80" : "#16A34A"}
+              />
             </View>
 
             <View className="ml-4 flex-1">
@@ -634,12 +677,13 @@ export default function AnalyticsScreen() {
 
           <View className="my-5 h-px bg-gray-100 dark:bg-gray-800" />
 
-          {/* Average Expense */}
           <View className="flex-row items-center">
             <View className="h-11 w-11 items-center justify-center rounded-xl bg-red-50 dark:bg-red-950">
-              <Text className="text-base font-bold text-red-600 dark:text-red-400">
-                ↓
-              </Text>
+              <Ionicons
+                name="arrow-down"
+                size={18}
+                color={isDark ? "#F87171" : "#DC2626"}
+              />
             </View>
 
             <View className="ml-4 flex-1">
@@ -656,24 +700,24 @@ export default function AnalyticsScreen() {
       </View>
 
       {filteredTransactions.length === 0 && (
-        <View className="mt-6 overflow-hidden rounded-xl">
+        <View className="mt-6 overflow-hidden rounded-2xl">
           <LinearGradient
             colors={
-              isDark
-                ? ["#111827", "#172554"]
-                : ["#EFF6FF", "#EEF2FF"]
+              isDark ? ["#111827", "#172554"] : ["#EFF6FF", "#EEF2FF"]
             }
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
-            className="overflow-hidden rounded-xl"
+            className="overflow-hidden rounded-2xl"
           >
             <View className="absolute -right-12 -top-12 h-32 w-32 rounded-full bg-blue-500/10" />
 
             <View className="relative items-center p-6">
               <View className="h-12 w-12 items-center justify-center rounded-full bg-blue-100 dark:bg-blue-900">
-                <Text className="text-xl text-blue-600 dark:text-blue-400">
-                  +
-                </Text>
+                <Ionicons
+                  name="add"
+                  size={22}
+                  color={isDark ? "#93C5FD" : "#2563EB"}
+                />
               </View>
 
               <Text className="mt-4 text-lg font-bold text-gray-950 dark:text-white">
@@ -681,8 +725,8 @@ export default function AnalyticsScreen() {
               </Text>
 
               <Text className="mt-2 text-center text-sm leading-5 text-gray-500 dark:text-gray-400">
-                Add your first transaction to unlock your financial
-                insights and spending trends.
+                Add your first transaction to unlock your financial insights
+                and spending trends.
               </Text>
             </View>
           </LinearGradient>

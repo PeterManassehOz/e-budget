@@ -14,6 +14,7 @@ import {
   validateTransactionForm,
   type TransactionFormErrors,
 } from "@/utils/transactionValidation";
+import { Ionicons } from "@expo/vector-icons";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import {
@@ -33,16 +34,12 @@ import {
   View,
 } from "react-native";
 
-
 const BASE_BOTTOM_PADDING = 24;
 
 export default function EditTransactionScreen() {
   const router = useRouter();
-  const { id } =
-    useLocalSearchParams<{ id: string }>();
-
+  const { id } = useLocalSearchParams<{ id: string }>();
   const { isDark } = useTheme();
-
   const context = useContext(TransactionContext);
 
   const scrollViewRef = useRef<ScrollView>(null);
@@ -58,33 +55,19 @@ export default function EditTransactionScreen() {
 
   const { transactions, updateTransaction } = context;
 
-  const transaction = transactions.find(
-    (item) => item.id === id
-  );
+  const transaction = transactions.find((item) => item.id === id);
 
   const [transactionType, setTransactionType] =
     useState<TransactionType>("expense");
-
   const [amount, setAmount] = useState("");
-
-  const [category, setCategory] =
-    useState<TransactionCategory>("Food");
-
+  const [category, setCategory] = useState<TransactionCategory>("Food");
   const [description, setDescription] = useState("");
-
-  const [transactionDate, setTransactionDate] =
-    useState(new Date());
-
-  const [showDatePicker, setShowDatePicker] =
-    useState(false);
-
-  const [errors, setErrors] =
-    useState<TransactionFormErrors>({});
+  const [transactionDate, setTransactionDate] = useState(new Date());
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [errors, setErrors] = useState<TransactionFormErrors>({});
 
   const availableCategories =
-    transactionType === "income"
-      ? incomeCategories
-      : expenseCategories;
+    transactionType === "income" ? incomeCategories : expenseCategories;
 
   useEffect(() => {
     if (!transaction) {
@@ -100,24 +83,60 @@ export default function EditTransactionScreen() {
 
   useEffect(() => {
     const categories =
-      transactionType === "income"
-        ? incomeCategories
-        : expenseCategories;
+      transactionType === "income" ? incomeCategories : expenseCategories;
 
     const firstCategory = categories[0];
 
-    if (
-      !categories.includes(category) &&
-      firstCategory
-    ) {
+    if (!categories.includes(category) && firstCategory) {
       setCategory(firstCategory);
     }
   }, [transactionType, category]);
 
+  // Moved above the early "not found" return so this hook always runs in
+  // the same order, regardless of whether `transaction` exists yet.
+  useEffect(() => {
+    const showEvent =
+      Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow";
+    const hideEvent =
+      Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide";
+
+    const showSub = Keyboard.addListener(showEvent, (e) => {
+      const height = e.endCoordinates.height;
+
+      keyboardHeightRef.current = height;
+      setKeyboardHeight(height);
+
+      requestAnimationFrame(() => {
+        scrollViewRef.current?.scrollTo({
+          y: scrollOffsetRef.current + height,
+          animated: true,
+        });
+      });
+    });
+
+    const hideSub = Keyboard.addListener(hideEvent, () => {
+      const height = keyboardHeightRef.current;
+
+      keyboardHeightRef.current = 0;
+
+      scrollViewRef.current?.scrollTo({
+        y: Math.max(0, scrollOffsetRef.current - height),
+        animated: true,
+      });
+
+      setKeyboardHeight(0);
+    });
+
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
+
   if (!transaction) {
     return (
       <View className="flex-1 items-center justify-center bg-gray-50 px-6 dark:bg-gray-950">
-        <View className="w-full rounded-xl border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-gray-900">
+        <View className="w-full rounded-2xl border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-gray-900">
           <Text className="text-center text-xl font-bold text-gray-950 dark:text-white">
             Transaction not found
           </Text>
@@ -133,74 +152,17 @@ export default function EditTransactionScreen() {
     );
   }
 
-
-  useEffect(() => {
-    const showEvent =
-      Platform.OS === "ios"
-        ? "keyboardWillShow"
-        : "keyboardDidShow";
-
-    const hideEvent =
-      Platform.OS === "ios"
-        ? "keyboardWillHide"
-        : "keyboardDidHide";
-
-    const showSub = Keyboard.addListener(
-      showEvent,
-      (e) => {
-        const height = e.endCoordinates.height;
-
-        keyboardHeightRef.current = height;
-        setKeyboardHeight(height);
-
-        requestAnimationFrame(() => {
-          scrollViewRef.current?.scrollTo({
-            y: scrollOffsetRef.current + height,
-            animated: true,
-          });
-        });
-      }
-    );
-
-    const hideSub = Keyboard.addListener(
-      hideEvent,
-      () => {
-        const height = keyboardHeightRef.current;
-
-        keyboardHeightRef.current = 0;
-
-        scrollViewRef.current?.scrollTo({
-          y: Math.max(
-            0,
-            scrollOffsetRef.current - height
-          ),
-          animated: true,
-        });
-
-        setKeyboardHeight(0);
-      }
-    );
-
-    return () => {
-      showSub.remove();
-      hideSub.remove();
-    };
-  }, []);
-
   const handleUpdate = () => {
-    const validationErrors =
-      validateTransactionForm({
-        amount,
-        type: transactionType,
-        category,
-        date: transactionDate,
-      });
+    const validationErrors = validateTransactionForm({
+      amount,
+      type: transactionType,
+      category,
+      date: transactionDate,
+    });
 
     setErrors(validationErrors);
 
-    if (
-      Object.keys(validationErrors).length > 0
-    ) {
+    if (Object.keys(validationErrors).length > 0) {
       return;
     }
 
@@ -244,9 +206,7 @@ export default function EditTransactionScreen() {
   return (
     <KeyboardAvoidingView
       className="flex-1 bg-gray-50 dark:bg-gray-950"
-      behavior={
-        Platform.OS === "ios" ? "padding" : undefined
-      }
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
       <ScrollView
         ref={scrollViewRef}
@@ -262,14 +222,10 @@ export default function EditTransactionScreen() {
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
         onScroll={(e) => {
-          scrollOffsetRef.current =
-            e.nativeEvent.contentOffset.y;
+          scrollOffsetRef.current = e.nativeEvent.contentOffset.y;
         }}
         scrollEventThrottle={16}
       >
-        {/* =====================================================
-            PAGE HEADER
-        ===================================================== */}
         <View>
           <Text className="text-3xl font-bold text-gray-950 dark:text-white">
             Edit Transaction
@@ -280,9 +236,7 @@ export default function EditTransactionScreen() {
           </Text>
         </View>
 
-        {/* =====================================================
-            TRANSACTION TYPE
-        ===================================================== */}
+        {/* TRANSACTION TYPE */}
         <View className="mt-8">
           <Text className="text-sm font-semibold text-gray-600 dark:text-gray-300">
             Transaction Type
@@ -290,14 +244,12 @@ export default function EditTransactionScreen() {
 
           <View className="mt-3 flex-row gap-3">
             <Pressable
-              className={`flex-1 rounded-xl border px-4 py-4 ${
+              className={`flex-1 rounded-2xl border px-4 py-4 ${
                 transactionType === "income"
                   ? "border-green-600 bg-green-600"
                   : "border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900"
               }`}
-              onPress={() =>
-                setTransactionType("income")
-              }
+              onPress={() => setTransactionType("income")}
             >
               <View className="flex-row items-center justify-center">
                 <View
@@ -307,15 +259,17 @@ export default function EditTransactionScreen() {
                       : "bg-green-50 dark:bg-green-950"
                   }`}
                 >
-                  <Text
-                    className={`text-sm font-bold ${
+                  <Ionicons
+                    name="arrow-up"
+                    size={14}
+                    color={
                       transactionType === "income"
-                        ? "text-white"
-                        : "text-green-600 dark:text-green-400"
-                    }`}
-                  >
-                    ↑
-                  </Text>
+                        ? "#FFFFFF"
+                        : isDark
+                          ? "#4ADE80"
+                          : "#16A34A"
+                    }
+                  />
                 </View>
 
                 <Text
@@ -331,14 +285,12 @@ export default function EditTransactionScreen() {
             </Pressable>
 
             <Pressable
-              className={`flex-1 rounded-xl border px-4 py-4 ${
+              className={`flex-1 rounded-2xl border px-4 py-4 ${
                 transactionType === "expense"
                   ? "border-red-600 bg-red-600"
                   : "border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900"
               }`}
-              onPress={() =>
-                setTransactionType("expense")
-              }
+              onPress={() => setTransactionType("expense")}
             >
               <View className="flex-row items-center justify-center">
                 <View
@@ -348,15 +300,17 @@ export default function EditTransactionScreen() {
                       : "bg-red-50 dark:bg-red-950"
                   }`}
                 >
-                  <Text
-                    className={`text-sm font-bold ${
+                  <Ionicons
+                    name="arrow-down"
+                    size={14}
+                    color={
                       transactionType === "expense"
-                        ? "text-white"
-                        : "text-red-600 dark:text-red-400"
-                    }`}
-                  >
-                    ↓
-                  </Text>
+                        ? "#FFFFFF"
+                        : isDark
+                          ? "#F87171"
+                          : "#DC2626"
+                    }
+                  />
                 </View>
 
                 <Text
@@ -373,24 +327,20 @@ export default function EditTransactionScreen() {
           </View>
         </View>
 
-        {/* =====================================================
-            AMOUNT
-        ===================================================== */}
+        {/* AMOUNT */}
         <View className="mt-8">
           <Text className="text-sm font-semibold text-gray-600 dark:text-gray-300">
             Amount
           </Text>
 
           <TextInput
-            className={`mt-3 rounded-xl border bg-white px-4 py-4 text-lg font-semibold text-gray-950 dark:bg-gray-900 dark:text-white ${
+            className={`mt-3 rounded-2xl border bg-white px-4 py-4 text-lg font-semibold text-gray-950 dark:bg-gray-900 dark:text-white ${
               errors.amount
                 ? "border-red-500"
                 : "border-gray-200 dark:border-gray-800"
             }`}
             placeholder="0.00"
-            placeholderTextColor={
-              isDark ? "#64748B" : "#9CA3AF"
-            }
+            placeholderTextColor={isDark ? "#64748B" : "#9CA3AF"}
             value={amount}
             onChangeText={(value) => {
               setAmount(value);
@@ -406,38 +356,35 @@ export default function EditTransactionScreen() {
           )}
         </View>
 
-        {/* =====================================================
-            DATE
-        ===================================================== */}
+        {/* DATE */}
         <View className="mt-8">
           <Text className="text-sm font-semibold text-gray-600 dark:text-gray-300">
             Date
           </Text>
 
           <Pressable
-            className={`mt-3 flex-row items-center rounded-xl border bg-white px-4 py-4 dark:bg-gray-900 ${
+            className={`mt-3 flex-row items-center rounded-2xl border bg-white px-4 py-4 dark:bg-gray-900 ${
               errors.date
                 ? "border-red-500"
                 : "border-gray-200 dark:border-gray-800"
             }`}
-            onPress={() =>
-              setShowDatePicker(true)
-            }
+            onPress={() => setShowDatePicker(true)}
           >
             <View className="h-9 w-9 items-center justify-center rounded-xl bg-blue-50 dark:bg-blue-950">
-              <Text className="text-base">📅</Text>
+              <Ionicons
+                name="calendar-outline"
+                size={16}
+                color={isDark ? "#60A5FA" : "#2563EB"}
+              />
             </View>
 
             <View className="ml-3 flex-1">
               <Text className="text-base font-semibold text-gray-950 dark:text-white">
-                {transactionDate.toLocaleDateString(
-                  "en-NG",
-                  {
-                    day: "numeric",
-                    month: "long",
-                    year: "numeric",
-                  }
-                )}
+                {transactionDate.toLocaleDateString("en-NG", {
+                  day: "numeric",
+                  month: "long",
+                  year: "numeric",
+                })}
               </Text>
 
               <Text className="mt-1 text-xs text-gray-500 dark:text-gray-400">
@@ -447,9 +394,7 @@ export default function EditTransactionScreen() {
           </Pressable>
 
           {errors.date && (
-            <Text className="mt-2 text-sm text-red-500">
-              {errors.date}
-            </Text>
+            <Text className="mt-2 text-sm text-red-500">{errors.date}</Text>
           )}
 
           {showDatePicker && (
@@ -458,10 +403,7 @@ export default function EditTransactionScreen() {
               mode="date"
               display="default"
               maximumDate={new Date()}
-              onValueChange={(
-                event,
-                selectedDate
-              ) => {
+              onValueChange={(event, selectedDate) => {
                 setShowDatePicker(false);
 
                 if (selectedDate) {
@@ -473,23 +415,17 @@ export default function EditTransactionScreen() {
           )}
         </View>
 
-        {/* =====================================================
-            CATEGORY
-        ===================================================== */}
+        {/* CATEGORY */}
         <View className="mt-8">
           <SelectField
             label="Category"
             value={category}
-            options={availableCategories.map(
-              (item) => ({
-                label: item,
-                value: item,
-              })
-            )}
+            options={availableCategories.map((item) => ({
+              label: item,
+              value: item,
+            }))}
             onChange={(value) => {
-              setCategory(
-                value as TransactionCategory
-              );
+              setCategory(value as TransactionCategory);
 
               if (errors.category) {
                 setErrors((currentErrors) => ({
@@ -502,20 +438,16 @@ export default function EditTransactionScreen() {
           />
         </View>
 
-        {/* =====================================================
-            DESCRIPTION
-        ===================================================== */}
+        {/* DESCRIPTION */}
         <View className="mt-8">
           <Text className="text-sm font-semibold text-gray-600 dark:text-gray-300">
             Description
           </Text>
 
           <TextInput
-            className="mt-3 min-h-[110px] rounded-xl border border-gray-200 bg-white px-4 py-4 text-base leading-6 text-gray-950 dark:border-gray-800 dark:bg-gray-900 dark:text-white"
+            className="mt-3 min-h-[110px] rounded-2xl border border-gray-200 bg-white px-4 py-4 text-base leading-6 text-gray-950 dark:border-gray-800 dark:bg-gray-900 dark:text-white"
             placeholder="What was this transaction for?"
-            placeholderTextColor={
-              isDark ? "#64748B" : "#9CA3AF"
-            }
+            placeholderTextColor={isDark ? "#64748B" : "#9CA3AF"}
             value={description}
             onChangeText={setDescription}
             multiline
@@ -523,14 +455,14 @@ export default function EditTransactionScreen() {
           />
         </View>
 
-        {/* =====================================================
-            UPDATE
-        ===================================================== */}
+        {/* UPDATE */}
         <Pressable
-          className="mt-6 flex-row items-center justify-center rounded-xl bg-blue-800 py-4 dark:bg-blue-900 px-6 py-4"
+          className="mt-6 flex-row items-center justify-center rounded-2xl bg-blue-800 py-4 dark:bg-blue-900"
           onPress={handleUpdate}
         >
-          <Text className="text-center text-base font-bold text-white">
+          <Ionicons name="checkmark-circle" size={18} color="#FFFFFF" />
+
+          <Text className="ml-2 text-center text-base font-bold text-white">
             Update Transaction
           </Text>
         </Pressable>

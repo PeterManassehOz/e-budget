@@ -1,31 +1,53 @@
-import AppearanceSelector from "@/components/ui/AppearanceSelector";
+import ThemeSegmentedControl from "@/components/ui/ThemeSegmentedControl";
+import { getCategoryColor, getCategoryIcon } from "@/constants/categoryVisuals";
 import { useTheme } from "@/context/ThemeContext";
 import { TransactionContext } from "@/context/TransactionContext";
 import { formatCurrency } from "@/utils/currency";
 import {
   calculateTotalExpenses,
   calculateTotalIncome,
-  sortTransactionsByDate
+  sortTransactionsByDate,
 } from "@/utils/transactionAnalytics";
+import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
-import { useContext } from "react";
-import {
-  Pressable,
-  ScrollView,
-  Text,
-  View,
-} from "react-native";
+import { useCallback, useContext, useState } from "react";
+import { Pressable, RefreshControl, ScrollView, Text, View } from "react-native";
+
+
+function cardShadow(isDark: boolean, colors: { border: string }) {
+  return {
+    shadowColor: "#000000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: isDark ? 0 : 0.06,
+    shadowRadius: 10,
+    elevation: isDark ? 0 : 2,
+    borderWidth: isDark ? 1 : 0,
+    borderColor: colors.border,
+  };
+}
 
 export default function HomeScreen() {
   const router = useRouter();
-  const { isDark } = useTheme();
+  const { isDark, colors } = useTheme();
   const context = useContext(TransactionContext);
+  
+    const [isRefreshing, setIsRefreshing] = useState(false);
+
+  const handleRefresh = useCallback(() => {
+    setIsRefreshing(true);
+
+    // There's no real network call here — transactions live in local
+    // AsyncStorage via TransactionContext, so there's nothing to re-fetch.
+    // This just gives a brief, honest spinner instead of an instant snap
+    // back, which is what people expect from pull-to-refresh; if you add
+    // a backend sync later, replace this timeout with the actual sync call.
+    setTimeout(() => setIsRefreshing(false), 600);
+  }, []);
+
 
   if (!context) {
-    throw new Error(
-      "HomeScreen must be used inside TransactionProvider"
-    );
+    throw new Error("HomeScreen must be used inside TransactionProvider");
   }
 
   const { transactions } = context;
@@ -34,9 +56,7 @@ export default function HomeScreen() {
   const totalExpenses = calculateTotalExpenses(transactions);
   const balance = totalIncome - totalExpenses;
 
-  const recentTransactions = sortTransactionsByDate(
-    transactions
-  ).slice(0, 5);
+  const recentTransactions = sortTransactionsByDate(transactions).slice(0, 5);
 
   return (
     <View className="flex-1 bg-gray-50 dark:bg-gray-950">
@@ -44,6 +64,14 @@ export default function HomeScreen() {
         className="flex-1 bg-gray-50 px-6 dark:bg-gray-950"
         contentContainerClassName="pt-12 pb-28"
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={isRefreshing}
+            onRefresh={handleRefresh}
+            tintColor={isDark ? "#60A5FA" : "#2563EB"}
+            colors={[isDark ? "#60A5FA" : "#2563EB"]}
+          />
+        }
       >
         <View className="flex-row items-start justify-between">
           <View className="flex-1 pr-4">
@@ -55,19 +83,13 @@ export default function HomeScreen() {
               Take control of your money.
             </Text>
           </View>
-
-          <View className="ml-2 h-11 w-11 items-center justify-center rounded-full bg-gray-100 dark:bg-gray-800">
-            <Text className="text-lg">
-              {isDark ? "🌙" : "☀️"}
-            </Text>
-          </View>
         </View>
 
         <View className="mt-6">
-          <AppearanceSelector />
+          <ThemeSegmentedControl />
         </View>
 
-        <View className="mt-8 overflow-hidden rounded-xl">
+        <View className="mt-8 overflow-hidden rounded-2xl">
           <LinearGradient
             colors={
               isDark
@@ -76,19 +98,13 @@ export default function HomeScreen() {
             }
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
-            className="overflow-hidden rounded-xl"
+            className="overflow-hidden rounded-2xl"
           >
-            {/* Decorative background */}
             <View className="absolute -right-16 -top-20 h-56 w-56 rounded-full bg-white/10" />
-
             <View className="absolute -bottom-24 -left-20 h-64 w-64 rounded-full bg-indigo-300/10" />
-
             <View className="absolute right-12 top-20 h-24 w-24 rounded-full bg-blue-300/5" />
-
-            {/* Subtle shine */}
             <View className="absolute left-0 right-0 top-0 h-24 bg-white/5" />
 
-            {/* Content */}
             <View className="relative p-6">
               <View className="flex-row items-center justify-between">
                 <View>
@@ -102,9 +118,11 @@ export default function HomeScreen() {
                 </View>
 
                 <View className="h-10 w-10 items-center justify-center rounded-full border border-white/15 bg-white/10">
-                  <Text className="text-lg text-white">
-                    {balance >= 0 ? "↗" : "↘"}
-                  </Text>
+                  <Ionicons
+                    name={balance >= 0 ? "trending-up" : "trending-down"}
+                    size={18}
+                    color="#FFFFFF"
+                  />
                 </View>
               </View>
 
@@ -116,9 +134,11 @@ export default function HomeScreen() {
 
               <View className="mt-5 flex-row items-center">
                 <View className="h-9 w-9 items-center justify-center rounded-xl border border-white/10 bg-white/10">
-                  <Text className="text-sm font-bold text-white">
-                    {balance >= 0 ? "↑" : "↓"}
-                  </Text>
+                  <Ionicons
+                    name={balance >= 0 ? "arrow-up" : "arrow-down"}
+                    size={16}
+                    color="#FFFFFF"
+                  />
                 </View>
 
                 <Text className="ml-3 flex-1 text-sm leading-5 text-blue-100/90">
@@ -131,18 +151,22 @@ export default function HomeScreen() {
           </LinearGradient>
         </View>
 
-        {/* Income / Expenses */}
         <View className="mt-5 flex-row gap-3">
-          <View className="flex-1 rounded-xl border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-gray-900">
+          <View
+            className="flex-1 rounded-2xl bg-white p-5 dark:bg-gray-900"
+            style={cardShadow(isDark, colors)}
+          >
             <View className="flex-row items-center justify-between">
               <Text className="text-sm font-semibold text-gray-500 dark:text-gray-400">
                 Income
               </Text>
 
               <View className="h-9 w-9 items-center justify-center rounded-xl bg-green-50 dark:bg-green-950">
-                <Text className="text-base font-bold text-green-600 dark:text-green-400">
-                  ↑
-                </Text>
+                <Ionicons
+                  name="arrow-up"
+                  size={16}
+                  color={isDark ? "#4ADE80" : "#16A34A"}
+                />
               </View>
             </View>
 
@@ -155,16 +179,21 @@ export default function HomeScreen() {
             </Text>
           </View>
 
-          <View className="flex-1 rounded-xl border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-gray-900">
+          <View
+            className="flex-1 rounded-2xl bg-white p-5 dark:bg-gray-900"
+            style={cardShadow(isDark, colors)}
+          >
             <View className="flex-row items-center justify-between">
               <Text className="text-sm font-semibold text-gray-500 dark:text-gray-400">
                 Expenses
               </Text>
 
               <View className="h-9 w-9 items-center justify-center rounded-xl bg-red-50 dark:bg-red-950">
-                <Text className="text-base font-bold text-red-600 dark:text-red-400">
-                  ↓
-                </Text>
+                <Ionicons
+                  name="arrow-down"
+                  size={16}
+                  color={isDark ? "#F87171" : "#DC2626"}
+                />
               </View>
             </View>
 
@@ -179,14 +208,12 @@ export default function HomeScreen() {
         </View>
 
         <Pressable
-          className="mt-6 flex-row items-center justify-center rounded-xl bg-blue-800 py-4 dark:bg-blue-900 px-6 py-4"
+          className="mt-6 flex-row items-center justify-center rounded-2xl bg-blue-800 py-4 dark:bg-blue-900"
           onPress={() => router.push("/add-transaction")}
         >
-          <Text className="mr-2 text-lg font-bold text-white">
-            +
-          </Text>
+          <Ionicons name="add" size={18} color="#FFFFFF" />
 
-          <Text className="text-base font-bold text-white">
+          <Text className="ml-2 text-base font-bold text-white">
             Add Transaction
           </Text>
         </Pressable>
@@ -197,9 +224,7 @@ export default function HomeScreen() {
           </Text>
 
           {transactions.length > 0 && (
-            <Pressable
-              onPress={() => router.push("/(tabs)/transactions")}
-            >
+            <Pressable onPress={() => router.push("/(tabs)/transactions")}>
               <Text className="font-semibold text-blue-600 dark:text-blue-400">
                 See all
               </Text>
@@ -208,15 +233,31 @@ export default function HomeScreen() {
         </View>
 
         {recentTransactions.length === 0 ? (
-          <View className="mt-4 rounded-xl border border-gray-200 p-6 dark:border-gray-800">
-            <Text className="text-center text-base text-gray-500 dark:text-gray-400">
-              Your recent transactions will appear here.
+          <View
+            className="mt-4 items-center rounded-2xl bg-white px-6 py-10 dark:bg-gray-900"
+            style={cardShadow(isDark, colors)}
+          >
+            <View className="h-14 w-14 items-center justify-center rounded-xl bg-blue-50 dark:bg-blue-950">
+              <Ionicons
+                name="receipt-outline"
+                size={24}
+                color={isDark ? "#60A5FA" : "#2563EB"}
+              />
+            </View>
+
+            <Text className="mt-5 text-lg font-bold text-gray-950 dark:text-white">
+              No transactions yet
+            </Text>
+
+            <Text className="mt-2 text-center text-base leading-6 text-gray-500 dark:text-gray-400">
+              Your recent transactions will appear here once you add one.
             </Text>
           </View>
         ) : (
           <View className="mt-4">
             {recentTransactions.map((transaction) => {
               const isIncome = transaction.type === "income";
+              const categoryColor = getCategoryColor(transaction.category);
 
               const formattedDate = new Date(
                 transaction.date
@@ -228,28 +269,41 @@ export default function HomeScreen() {
               return (
                 <Pressable
                   key={transaction.id}
-                  className="mb-3 rounded-xl border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900"
+                  className="mb-3 rounded-2xl bg-white p-4 dark:bg-gray-900"
+                  style={cardShadow(isDark, colors)}
                   onPress={() =>
                     router.push({
                       pathname: "/edit-transaction",
-                      params: {
-                        id: transaction.id,
-                      },
+                      params: { id: transaction.id },
                     })
                   }
                 >
-                  <View className="flex-row items-center justify-between">
+                  <View className="flex-row items-center">
+                    <View
+                      className="mr-3 h-11 w-11 items-center justify-center rounded-2xl"
+                      style={{
+                        backgroundColor: isDark
+                          ? `${categoryColor}26`
+                          : `${categoryColor}14`,
+                      }}
+                    >
+                      <Ionicons
+                        name={getCategoryIcon(transaction.category)}
+                        size={20}
+                        color={categoryColor}
+                      />
+                    </View>
+
                     <View className="flex-1 pr-4">
                       <Text className="text-base font-bold text-gray-950 dark:text-white">
                         {transaction.category}
                       </Text>
 
                       <Text
-                        className="mt-1 text-sm text-gray-500 dark:text-gray-400"
+                        className="mt-0.5 text-sm text-gray-500 dark:text-gray-400"
                         numberOfLines={1}
                       >
-                        {transaction.description ||
-                          "No description"}
+                        {transaction.description || "No description"}
                       </Text>
                     </View>
 
@@ -257,8 +311,8 @@ export default function HomeScreen() {
                       <Text
                         className={`text-base font-bold ${
                           isIncome
-                            ? "text-green-600"
-                            : "text-red-600"
+                            ? "text-green-600 dark:text-green-400"
+                            : "text-red-600 dark:text-red-400"
                         }`}
                       >
                         {isIncome ? "+" : "-"}

@@ -3,6 +3,11 @@ import { useTheme } from "@/context/ThemeContext";
 import { TransactionContext } from "@/context/TransactionContext";
 import { formatCurrency } from "@/utils/currency";
 import { sortTransactionsByDate } from "@/utils/transactionAnalytics";
+import {
+  buildGroupedTransactionRows,
+  type TransactionListRow,
+} from "@/utils/transactionGrouping";
+import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useContext, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -21,29 +26,44 @@ const BASE_BOTTOM_PADDING = 100;
 type TransactionFilter = "all" | "income" | "expense";
 
 const transactionFilterOptions = [
-  {
-    label: "All Transactions",
-    value: "all",
-  },
-  {
-    label: "Income",
-    value: "income",
-  },
-  {
-    label: "Expenses",
-    value: "expense",
-  },
+  { label: "All Transactions", value: "all" },
+  { label: "Income", value: "income" },
+  { label: "Expenses", value: "expense" },
 ];
+
+const CATEGORY_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
+  Food: "fast-food-outline",
+  Transport: "car-outline",
+  Bills: "receipt-outline",
+  Shopping: "bag-handle-outline",
+  Entertainment: "film-outline",
+  Health: "medkit-outline",
+  Other: "ellipsis-horizontal-circle-outline",
+  Salary: "cash-outline",
+  Freelance: "briefcase-outline",
+};
+
+const CATEGORY_COLORS: Record<string, string> = {
+  Food: "#2563EB",
+  Transport: "#16A34A",
+  Bills: "#DC2626",
+  Shopping: "#CA8A04",
+  Entertainment: "#9333EA",
+  Health: "#0891B2",
+  Other: "#EA580C",
+  Salary: "#16A34A",
+  Freelance: "#7C3AED",
+};
 
 export default function TransactionsScreen() {
   const router = useRouter();
-  const { isDark } = useTheme();
+  const { isDark, colors } = useTheme();
   const [searchQuery, setSearchQuery] = useState("");
   const [transactionFilter, setTransactionFilter] =
     useState<TransactionFilter>("all");
   const context = useContext(TransactionContext);
 
-  const flatListRef = useRef<FlatList>(null);
+  const flatListRef = useRef<FlatList<TransactionListRow>>(null);
   const scrollOffsetRef = useRef(0);
   const keyboardHeightRef = useRef(0);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
@@ -62,12 +82,8 @@ export default function TransactionsScreen() {
     return transactions.filter((transaction) => {
       const matchesSearch =
         normalizedQuery === "" ||
-        transaction.description
-          .toLowerCase()
-          .includes(normalizedQuery) ||
-        transaction.category
-          .toLowerCase()
-          .includes(normalizedQuery);
+        transaction.description.toLowerCase().includes(normalizedQuery) ||
+        transaction.category.toLowerCase().includes(normalizedQuery);
 
       const matchesType =
         transactionFilter === "all" ||
@@ -76,6 +92,14 @@ export default function TransactionsScreen() {
       return matchesSearch && matchesType;
     });
   }, [transactions, searchQuery, transactionFilter]);
+
+  const rows = useMemo(
+    () =>
+      buildGroupedTransactionRows(
+        sortTransactionsByDate(filteredTransactions)
+      ),
+    [filteredTransactions]
+  );
 
   useEffect(() => {
     const showEvent =
@@ -120,10 +144,7 @@ export default function TransactionsScreen() {
       "Delete transaction",
       "Are you sure you want to delete this transaction?",
       [
-        {
-          text: "Cancel",
-          style: "cancel",
-        },
+        { text: "Cancel", style: "cancel" },
         {
           text: "Delete",
           style: "destructive",
@@ -147,9 +168,7 @@ export default function TransactionsScreen() {
         </View>
 
         <View className="ml-2 h-11 w-11 items-center justify-center rounded-full bg-gray-100 dark:bg-gray-800">
-          <Text className="text-lg">
-            {isDark ? "💳" : "💰"}
-          </Text>
+          <Text className="text-lg">{isDark ? "💳" : "💰"}</Text>
         </View>
       </View>
 
@@ -176,8 +195,8 @@ export default function TransactionsScreen() {
       <FlatList
         ref={flatListRef}
         className="mt-4 flex-1"
-        data={sortTransactionsByDate(filteredTransactions)}
-        keyExtractor={(transaction) => transaction.id}
+        data={rows}
+        keyExtractor={(row) => row.id}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
         onScroll={(e) => {
@@ -192,7 +211,7 @@ export default function TransactionsScreen() {
           flexGrow: 1,
         }}
         ListEmptyComponent={
-          <View className="items-center rounded-xl border border-gray-200 bg-white px-6 py-10 dark:border-gray-800 dark:bg-gray-900">
+          <View className="items-center rounded-2xl border border-gray-200 bg-white px-6 py-10 dark:border-gray-800 dark:bg-gray-900">
             <View className="h-14 w-14 items-center justify-center rounded-xl bg-blue-50 dark:bg-blue-950">
               <Text className="text-2xl">
                 {transactions.length === 0 ? "💰" : "🔎"}
@@ -216,65 +235,87 @@ export default function TransactionsScreen() {
                 className="mt-6 rounded-xl bg-blue-600 px-5 py-3"
                 onPress={() => router.push("/add-transaction")}
               >
-                <Text className="font-bold text-white">
-                  Add Transaction
-                </Text>
+                <Text className="font-bold text-white">Add Transaction</Text>
               </Pressable>
             )}
           </View>
         }
-        renderItem={({ item: transaction }) => {
-          const isIncome = transaction.type === "income";
+        renderItem={({ item, index }) => {
+          if (item.type === "header") {
+            return (
+              <Text
+                className={`mb-3 text-xs font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 ${
+                  index === 0 ? "mt-0" : "mt-6"
+                }`}
+              >
+                {item.label}
+              </Text>
+            );
+          }
 
-          const formattedDate = new Date(
+          const { transaction } = item;
+          const isIncome = transaction.type === "income";
+          const categoryColor =
+            CATEGORY_COLORS[transaction.category] ?? colors.primary;
+
+          const iconName =
+            CATEGORY_ICONS[transaction.category] ?? "ellipse-outline";
+
+          const shortDate = new Date(
             transaction.date
           ).toLocaleDateString("en-NG", {
             day: "numeric",
             month: "short",
-            year: "numeric",
           });
 
           return (
-            <View className="mb-3 rounded-xl border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-gray-900">
-              <View className="flex-row items-start justify-between">
-                <View className="flex-1 pr-4">
-                  <View className="flex-row items-center">
-                    <View
-                      className={`mr-3 h-9 w-9 items-center justify-center rounded-xl ${
-                        isIncome
-                          ? "bg-green-50 dark:bg-green-950"
-                          : "bg-red-50 dark:bg-red-950"
-                      }`}
-                    >
-                      <Text
-                        className={`text-base font-bold ${
-                          isIncome
-                            ? "text-green-600 dark:text-green-400"
-                            : "text-red-600 dark:text-red-400"
-                        }`}
-                      >
-                        {isIncome ? "↑" : "↓"}
-                      </Text>
-                    </View>
+            <View
+              className="mb-3 rounded-2xl bg-white p-4 dark:bg-gray-900"
+              style={{
+                shadowColor: "#000000",
+                shadowOffset: { width: 0, height: 2 },
+                shadowOpacity: isDark ? 0 : 0.06,
+                shadowRadius: 10,
+                elevation: isDark ? 0 : 2,
+                borderWidth: isDark ? 1 : 0,
+                borderColor: colors.border,
+              }}
+            >
+              <View className="flex-row items-center">
+                <View
+                  className="mr-3 h-12 w-12 items-center justify-center rounded-2xl"
+                  style={{
+                    backgroundColor: isDark
+                      ? `${categoryColor}26`
+                      : `${categoryColor}14`,
+                  }}
+                >
+                  <Ionicons
+                    name={iconName}
+                    size={22}
+                    color={categoryColor}
+                  />
+                </View>
 
-                    <View className="flex-1">
-                      <Text className="text-lg font-bold text-gray-950 dark:text-white">
-                        {transaction.category}
-                      </Text>
+                <View className="flex-1 pr-2">
+                  <Text
+                    className="text-base font-bold text-gray-950 dark:text-white"
+                    numberOfLines={1}
+                  >
+                    {transaction.category}
+                  </Text>
 
-                      <Text
-                        className="mt-1 text-sm text-gray-500 dark:text-gray-400"
-                        numberOfLines={1}
-                      >
-                        {transaction.description || "No description"}
-                      </Text>
-                    </View>
-                  </View>
+                  <Text
+                    className="mt-0.5 text-sm text-gray-500 dark:text-gray-400"
+                    numberOfLines={1}
+                  >
+                    {transaction.description || "No description"}
+                  </Text>
                 </View>
 
                 <View className="items-end">
                   <Text
-                    className={`text-lg font-bold ${
+                    className={`text-base font-bold ${
                       isIncome
                         ? "text-green-600 dark:text-green-400"
                         : "text-red-600 dark:text-red-400"
@@ -284,57 +325,39 @@ export default function TransactionsScreen() {
                     {formatCurrency(transaction.amount)}
                   </Text>
 
-                  <View
-                    className={`mt-2 rounded-xl px-2.5 py-1 ${
-                      isIncome
-                        ? "bg-green-50 dark:bg-green-950"
-                        : "bg-red-50 dark:bg-red-950"
-                    }`}
-                  >
-                    <Text
-                      className={`text-xs font-semibold ${
-                        isIncome
-                          ? "text-green-600 dark:text-green-400"
-                          : "text-red-600 dark:text-red-400"
-                      }`}
-                    >
-                      {isIncome ? "Income" : "Expense"}
-                    </Text>
-                  </View>
+                  <Text className="mt-1 text-xs text-gray-400 dark:text-gray-500">
+                    {shortDate}
+                  </Text>
                 </View>
               </View>
 
-              <View className="mt-4 border-t border-gray-100 pt-4 dark:border-gray-800">
-                <View className="flex-row items-center justify-between">
-                  <Text className="text-sm text-gray-500 dark:text-gray-400">
-                    {formattedDate}
-                  </Text>
+              <View className="mt-3 flex-row justify-end gap-2 border-t border-gray-100 pt-3 dark:border-gray-800">
+                <Pressable
+                  className="h-9 w-9 items-center justify-center rounded-xl bg-blue-50 dark:bg-blue-950"
+                  onPress={() =>
+                    router.push({
+                      pathname: "/edit-transaction",
+                      params: { id: transaction.id },
+                    })
+                  }
+                >
+                  <Ionicons
+                    name="pencil-outline"
+                    size={16}
+                    color={isDark ? "#60A5FA" : "#2563EB"}
+                  />
+                </Pressable>
 
-                  <View className="flex-row gap-2">
-                    <Pressable
-                      className="rounded-xl border border-blue-200 px-4 py-2 dark:border-blue-900"
-                      onPress={() =>
-                        router.push({
-                          pathname: "/edit-transaction",
-                          params: { id: transaction.id },
-                        })
-                      }
-                    >
-                      <Text className="font-semibold text-blue-600 dark:text-blue-400">
-                        Edit
-                      </Text>
-                    </Pressable>
-
-                    <Pressable
-                      className="rounded-xl border border-red-200 px-4 py-2 dark:border-red-900"
-                      onPress={() => handleDelete(transaction.id)}
-                    >
-                      <Text className="font-semibold text-red-600 dark:text-red-400">
-                        Delete
-                      </Text>
-                    </Pressable>
-                  </View>
-                </View>
+                <Pressable
+                  className="h-9 w-9 items-center justify-center rounded-xl bg-red-50 dark:bg-red-950"
+                  onPress={() => handleDelete(transaction.id)}
+                >
+                  <Ionicons
+                    name="trash-outline"
+                    size={16}
+                    color={isDark ? "#F87171" : "#DC2626"}
+                  />
+                </Pressable>
               </View>
             </View>
           );

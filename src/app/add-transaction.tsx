@@ -14,6 +14,7 @@ import {
   validateTransactionForm,
   type TransactionFormErrors,
 } from "@/utils/transactionValidation";
+import { Ionicons } from "@expo/vector-icons";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { useRouter } from "expo-router";
 import {
@@ -219,9 +220,6 @@ export default function AddTransactionScreen() {
         }}
         scrollEventThrottle={16}
       >
-        {/* =====================================================
-            PAGE HEADER
-        ===================================================== */}
         <View>
           <Text className="text-3xl font-bold text-gray-950 dark:text-white">
             Add Transaction
@@ -232,9 +230,7 @@ export default function AddTransactionScreen() {
           </Text>
         </View>
 
-        {/* =====================================================
-            TRANSACTION TYPE
-        ===================================================== */}
+        {/* TRANSACTION TYPE */}
         <View className="mt-8">
           <Text className="text-sm font-semibold text-gray-600 dark:text-gray-300">
             Transaction Type
@@ -242,7 +238,7 @@ export default function AddTransactionScreen() {
 
           <View className="mt-3 flex-row gap-3">
             <Pressable
-              className={`flex-1 rounded-xl border px-4 py-4 ${
+              className={`flex-1 rounded-2xl border px-4 py-4 ${
                 transactionType === "income"
                   ? "border-green-600 bg-green-600"
                   : "border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900"
@@ -259,15 +255,17 @@ export default function AddTransactionScreen() {
                       : "bg-green-50 dark:bg-green-950"
                   }`}
                 >
-                  <Text
-                    className={`text-sm font-bold ${
+                  <Ionicons
+                    name="arrow-up"
+                    size={14}
+                    color={
                       transactionType === "income"
-                        ? "text-white"
-                        : "text-green-600 dark:text-green-400"
-                    }`}
-                  >
-                    ↑
-                  </Text>
+                        ? "#FFFFFF"
+                        : isDark
+                          ? "#4ADE80"
+                          : "#16A34A"
+                    }
+                  />
                 </View>
 
                 <Text
@@ -283,7 +281,7 @@ export default function AddTransactionScreen() {
             </Pressable>
 
             <Pressable
-              className={`flex-1 rounded-xl border px-4 py-4 ${
+              className={`flex-1 rounded-2xl border px-4 py-4 ${
                 transactionType === "expense"
                   ? "border-red-600 bg-red-600"
                   : "border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900"
@@ -300,15 +298,17 @@ export default function AddTransactionScreen() {
                       : "bg-red-50 dark:bg-red-950"
                   }`}
                 >
-                  <Text
-                    className={`text-sm font-bold ${
+                  <Ionicons
+                    name="arrow-down"
+                    size={14}
+                    color={
                       transactionType === "expense"
-                        ? "text-white"
-                        : "text-red-600 dark:text-red-400"
-                    }`}
-                  >
-                    ↓
-                  </Text>
+                        ? "#FFFFFF"
+                        : isDark
+                          ? "#F87171"
+                          : "#DC2626"
+                    }
+                  />
                 </View>
 
                 <Text
@@ -325,16 +325,14 @@ export default function AddTransactionScreen() {
           </View>
         </View>
 
-        {/* =====================================================
-            AMOUNT
-        ===================================================== */}
+        {/* AMOUNT */}
         <View className="mt-8">
           <Text className="text-sm font-semibold text-gray-600 dark:text-gray-300">
             Amount
           </Text>
 
           <TextInput
-            className={`mt-3 rounded-xl border bg-white px-4 py-4 text-lg font-semibold text-gray-950 dark:bg-gray-900 dark:text-white ${
+            className={`mt-3 rounded-2xl border bg-white px-4 py-4 text-lg font-semibold text-gray-950 dark:bg-gray-900 dark:text-white ${
               errors.amount
                 ? "border-red-500"
                 : "border-gray-200 dark:border-gray-800"
@@ -358,16 +356,14 @@ export default function AddTransactionScreen() {
           )}
         </View>
 
-        {/* =====================================================
-            DATE
-        ===================================================== */}
+        {/* DATE */}
         <View className="mt-8">
           <Text className="text-sm font-semibold text-gray-600 dark:text-gray-300">
             Date
           </Text>
 
           <Pressable
-            className={`mt-3 flex-row items-center rounded-xl border bg-white px-4 py-4 dark:bg-gray-900 ${
+            className={`mt-3 flex-row items-center rounded-2xl border bg-white px-4 py-4 dark:bg-gray-900 ${
               errors.date
                 ? "border-red-500"
                 : "border-gray-200 dark:border-gray-800"
@@ -377,7 +373,11 @@ export default function AddTransactionScreen() {
             }
           >
             <View className="h-9 w-9 items-center justify-center rounded-xl bg-blue-50 dark:bg-blue-950">
-              <Text className="text-base">📅</Text>
+              <Ionicons
+                name="calendar-outline"
+                size={16}
+                color={isDark ? "#60A5FA" : "#2563EB"}
+              />
             </View>
 
             <View className="ml-3 flex-1">
@@ -425,9 +425,7 @@ export default function AddTransactionScreen() {
           )}
         </View>
 
-        {/* =====================================================
-            CATEGORY
-        ===================================================== */}
+        {/* CATEGORY */}
         <View className="mt-8">
           <SelectField
             label="Category"
@@ -454,16 +452,14 @@ export default function AddTransactionScreen() {
           />
         </View>
 
-        {/* =====================================================
-            DESCRIPTION
-        ===================================================== */}
+        {/* DESCRIPTION */}
         <View className="mt-8">
           <Text className="text-sm font-semibold text-gray-600 dark:text-gray-300">
             Description
           </Text>
 
           <TextInput
-            className="mt-3 min-h-[110px] rounded-xl border border-gray-200 bg-white px-4 py-4 text-base leading-6 text-gray-950 dark:border-gray-800 dark:bg-gray-900 dark:text-white"
+            className="mt-3 min-h-[110px] rounded-2xl border border-gray-200 bg-white px-4 py-4 text-base leading-6 text-gray-950 dark:border-gray-800 dark:bg-gray-900 dark:text-white"
             placeholder="What was this transaction for?"
             placeholderTextColor={
               isDark ? "#64748B" : "#9CA3AF"
@@ -475,14 +471,14 @@ export default function AddTransactionScreen() {
           />
         </View>
 
-        {/* =====================================================
-            SUBMIT
-        ===================================================== */}
+        {/* SUBMIT */}
         <Pressable
-          className="mt-6 flex-row items-center justify-center rounded-xl bg-blue-800 py-4 dark:bg-blue-900 px-6 py-4"
+          className="mt-6 flex-row items-center justify-center rounded-2xl bg-blue-800 py-4 dark:bg-blue-900"
           onPress={handleSubmit}
         >
-          <Text className="text-center text-base font-bold text-white">
+          <Ionicons name="checkmark-circle" size={18} color="#FFFFFF" />
+
+          <Text className="ml-2 text-center text-base font-bold text-white">
             Save Transaction
           </Text>
         </Pressable>
